@@ -1,0 +1,43 @@
+# Dependencies and package-manager caches
+node_modules
+.npm/
+.pnpm-store/
+.yarn/cache/
+.pnp.*
+# Build and test output
+dist/
+build/
+out/
+coverage/
+.vite/
+.cache/
+.turbo/
+*.tsbuildinfo
+# Local configuration, database data, and agent scratch files
+.local-data/
+.superpowers/
+.codex/
+.agents/
+.env*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.db
+*.db-*
+# Credentials and key material
+.ssh/
+.aws/
+secrets/
+credentials.json
+credentials.*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+# Logs and operating-system files
+*.log
+.DS_Store

@@ -1,0 +1,13 @@
+import{expect,test as baseTest}from'vitest';
+const test=baseTest.skipIf(!process.env.MWA_TEST_PASSWORD);
+import{fixture}from'../mysql/fixture.js';import{readSource}from'../../src/server/features/transfers/import/codec.js';
+test('CSV and XLSX roundtrip into existing tables, log links and authenticated downloads work',async()=>{const f=await fixture();try{
+ const source={connectionId:f.profile.id,schema:f.schema,table:'records'};const base=(await f.request('/api/data/browse',{target:source,page:1,pageSize:100,filters:[],sort:[]})).json();
+ for(const format of ['csv','xlsx']as const){const name=`roundtrip_${format}`;await f.admin.query(`CREATE TABLE \`${name}\` LIKE records`);const exported=await f.request('/api/transfers/export/start',{request:{target:source,page:1,pageSize:100,filters:[],sort:[]},scope:'all',format});expect(exported.statusCode).toBe(202);await f.app.services.queue.idle();const task=f.app.services.queue.store.get(exported.json().id);expect(task.state,task.error?.message).toBe('completed');const file=f.app.services.files.get(task.outputFileId!);
+ const uploaded=await f.app.services.files.upload(f.app.services.files.download(file.id),`source.${format}`);const options={format,hasHeader:true,toolEscaping:true,emptyCells:'null' as const,delimiter:',' as const};const mappings=base.meta.columns.flatMap((c:{generated:boolean;dataType:string;name:string},i:number)=>!c.generated&&c.dataType!=='varbinary'?[{sourceIndex:i,targetColumn:c.name}]:[]);const target={...source,table:name};
+ const preview=await f.request('/api/transfers/import/preview',{uploadId:uploaded.id,target,options,mappings});expect(preview.statusCode).toBe(200);expect(preview.json().errors).toEqual([]);const imported=await f.request('/api/transfers/import/start',{uploadId:uploaded.id,target,options,mappings});expect(imported.statusCode).toBe(202);await f.app.services.queue.idle();const importTask=f.app.services.queue.store.get(imported.json().id);expect(importTask.state,importTask.error?.message).toBe('completed');const actual=(await f.request('/api/data/browse',{target,page:1,pageSize:100,filters:[],sort:[]})).json().rows;
+ expect(actual).toEqual(base.rows.map((r:Record<string,unknown>)=>({...r,binary_value:null})));
+ const download=await f.app.inject({method:'POST',url:`/api/transfers/tasks/${task.id}/download`,headers:{host:'127.0.0.1:3210','content-type':'application/x-www-form-urlencoded'},payload:'token=fixture-token'});expect(download.statusCode).toBe(200);expect(download.headers['content-disposition']).toContain('attachment');
+ const logs=(await f.request('/api/logs?type=import')).json();expect(logs.items.some((r:{taskId:string})=>r.taskId===importTask.id)).toBe(true);
+ }
+}finally{await f.cleanup();}});

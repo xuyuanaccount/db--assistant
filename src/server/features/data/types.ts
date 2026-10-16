@@ -1,0 +1,16 @@
+import { z } from 'zod';
+import {FILTER_OPERATORS} from '../../../shared/filters.js';
+export const cellSchema=z.union([z.null(),z.string(),z.object({binaryHex:z.string()})]);
+export const identifier128=z.string().min(1).refine(value=>[...value].length<=128&&!value.includes('\0'),'标识符最多 128 个 Unicode 字符且不能包含 NUL');
+export const targetSchema=z.object({connectionId:z.string().min(1),schema:identifier128,table:identifier128});
+export const filterSchema=z.object({column:z.string(),op:z.enum(FILTER_OPERATORS),value:cellSchema.optional(),valueTo:cellSchema.optional(),values:z.array(cellSchema).max(100).optional()});
+export const browseSchema=z.object({target:targetSchema,page:z.number().int().min(1).max(1_000_000),pageSize:z.union([z.literal(100),z.literal(200),z.literal(500)]),filters:z.array(filterSchema).max(30),filterMatch:z.enum(['all','any']).optional(),sort:z.array(z.object({column:z.string(),direction:z.enum(['asc','desc'])})).max(20)});
+export type Filter=z.infer<typeof filterSchema>;
+export type BrowseRequest=z.infer<typeof browseSchema>;
+export type Sort=BrowseRequest['sort'][number];
+const rowSchema=z.record(z.string(),cellSchema);
+export const valueKindSchema=z.enum(['null','text','integer','decimal','real','boolean','temporal','json','binary']);
+const kindsSchema=z.record(z.string(),valueKindSchema);
+export const changeSchema=z.discriminatedUnion('kind',[z.object({kind:z.literal('insert'),values:rowSchema,valueKinds:kindsSchema.optional()}),z.object({kind:z.literal('update'),original:rowSchema,values:rowSchema,originalKinds:kindsSchema.optional(),valueKinds:kindsSchema.optional()}),z.object({kind:z.literal('delete'),original:rowSchema,originalKinds:kindsSchema.optional()})]);
+export type RowChange=z.infer<typeof changeSchema>;
+export const editsSchema=z.object({target:targetSchema,changes:z.array(changeSchema).min(1).max(500),expectedFingerprint:z.string().min(1).max(512).optional(),generation:z.number().int().nonnegative().optional()});
